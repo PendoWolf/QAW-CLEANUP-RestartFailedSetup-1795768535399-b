@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import * as pendo from "pendo-server-sdk";
 import type { Account, IncomingChatMessage, Trip, User } from "../types.js";
 
 /** The model the Tripwise Assistant answers with. */
@@ -6,6 +7,13 @@ export const ASSISTANT_MODEL = "claude-opus-5-5";
 
 // The SDK reads the key from the ANTHROPIC_API_KEY environment variable.
 const anthropic = new Anthropic();
+
+// Pendo's auto-patch reaches the CommonJS build of @anthropic-ai/sdk, but this ES module project loads its ES module
+// build, so the call is traced for Pendo Agent Analytics with traceLlm.
+const createMessage = pendo.traceLlm(
+  "anthropic.messages.create",
+  async (params: Anthropic.MessageCreateParamsNonStreaming) => anthropic.messages.create(params),
+);
 
 /** The assistant's instructions, with what it knows about the signed-in user and their upcoming trips. */
 function systemPrompt(user: User, account: Account, upcomingTrips: Trip[]): string {
@@ -31,7 +39,7 @@ export async function writeAssistantReply(
   messages: IncomingChatMessage[],
   context: { user: User; account: Account; upcomingTrips: Trip[] },
 ): Promise<string> {
-  const response = await anthropic.messages.create({
+  const response = await createMessage({
     model: ASSISTANT_MODEL,
     max_tokens: 2000,
     system: systemPrompt(context.user, context.account, context.upcomingTrips),
